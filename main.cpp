@@ -121,12 +121,12 @@ static inline void task_imu_update(void)
   float w = quaternion._data.w;
 
   const float mag = x * x + y * y + z * z + w * w;
-  const float norm = __builtin_sqrtf(mag + __FLT_EPSILON__);
+  const float inv = 1.0f / __builtin_sqrtf(mag + __FLT_EPSILON__);
 
-  x /= norm;
-  y /= norm;
-  z /= norm;
-  w /= norm;
+  x *= inv;
+  y *= inv;
+  z *= inv;
+  w *= inv;
 
   const float yaw = __builtin_atan2f(2.0f * (w * z + x * y), 1.0f - 2.0f * (y * y + z * z)) * RAD_TO_DEG;
   const float pitch = (__builtin_atan2f(2.0f * (w * x + y * z), 1.0f - 2.0f * (x * x + y * y)) * RAD_TO_DEG) + 90.0f;
