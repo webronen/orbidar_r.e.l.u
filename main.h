@@ -25,6 +25,7 @@ SensorQuaternion quaternion(BHY2_SENSOR_ID_RV);
 
 #include <vl53l4cx_class.h>
 VL53L4CX vl53l4cx(&Wire, NC);
+VL53L4CX_UserRoi_t vl53l4cx_UserRoi = {6, 6, 9, 9};
 
 #define SERIAL_BAUDRATE 115200
 #define HZ_TO_US(Hz) ((uint32_t)(1000000.0f / (Hz)))
@@ -100,28 +101,23 @@ typedef struct __attribute__((packed, aligned(4)))
 
 static_assert(sizeof(Task_t) == 24, "Task_t struct size must be 24 bytes (6 words)");
 
-// Helper function prototypes
 static inline void handle_tasks(void);
 static inline void handle_serial(void);
 static void vl53l4cx_select(const uint8_t channel);
 
-// Task function prototypes
 static inline void task_imu_update(void);
 static inline void task_dbg_update(void);
 static inline void task_tof_update(void);
 
-// Critical tasks array
 static Task_t critical_tasks[CRITICAL_TASK_COUNT] = {
     {"IMU", task_imu_update, HZ_TO_US(401), 0},
     {"TOF", task_tof_update, HZ_TO_US(31), 0},
 };
 
-// Background tasks array
 static Task_t background_tasks[BACKGROUND_TASK_COUNT] = {
     {"DBG", task_dbg_update, HZ_TO_US(1), 0},
 };
 
-// Sensor field info struct for handling requests
 typedef struct __attribute__((packed, aligned(4)))
 {
   const void *ptr;
@@ -130,7 +126,6 @@ typedef struct __attribute__((packed, aligned(4)))
 
 static_assert(sizeof(SensorField_t) == 8, "SensorField_t struct must be 8 bytes (2 words)");
 
-// Sensor values instance
 static SensorValues_t response{
     .altitude = 0.0f,
     .distance = {0},
@@ -141,7 +136,6 @@ static SensorValues_t response{
     .speed = 0.0f,
     .temperature = 25.0f};
 
-// Sensor fields array for request handling
 static const SensorField_t handle_response[REQUEST_TYPE_COUNT] = {
     {&response, sizeof(SensorValues_t)},
     {&response.altitude, sizeof(response.altitude)},
