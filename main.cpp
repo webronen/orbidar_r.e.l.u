@@ -64,7 +64,7 @@ static inline void handle_tasks(const uint32_t current_us)
 {
   for (uint8_t i = 0; i < SYNC_TASK_COUNT; i++)
   {
-    if ((int32_t)(current_us - critical_tasks[i].previous_us) >= 0)
+    if ((const int32_t)(current_us - critical_tasks[i].previous_us) >= 0)
     {
       critical_tasks[i].previous_us += critical_tasks[i].interval_us;
       critical_tasks[i].task();
@@ -72,7 +72,7 @@ static inline void handle_tasks(const uint32_t current_us)
   }
 
   static uint8_t i = 0;
-  if ((int32_t)(current_us - background_tasks[i].previous_us) >= background_tasks[i].interval_us)
+  if ((const int32_t)(current_us - background_tasks[i].previous_us) >= (const int32_t)background_tasks[i].interval_us)
   {
     background_tasks[i].previous_us = current_us;
     background_tasks[i].task();
