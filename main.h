@@ -32,8 +32,8 @@ VL53L4CX_UserRoi_t vl53l4cx_UserRoi = {6, 6, 9, 9};
 #define TCA9548A_ADDR 0x70
 #define VL53L4CX_I2C_SPEED 400000
 #define VL53L4CX_COUNT 8
-#define CRITICAL_TASK_COUNT 3
-#define BACKGROUND_TASK_COUNT 1
+#define SYNC_TASK_COUNT 3
+#define ASYNC_TASK_COUNT 1
 #define REQUEST_TYPE_COUNT 9
 #define PA_TO_HPA 0.01f
 
@@ -109,23 +109,23 @@ typedef struct __attribute__((packed, aligned(4)))
 
 static_assert(sizeof(SensorField_t) == 8, "SensorField_t struct must be 8 bytes (2 words)");
 
-static inline void handle_tasks(void);
+static inline void handle_tasks(const uint32_t current_us);
 static inline void handle_serial(void);
 static void vl53l4cx_select(const uint8_t channel);
 
 static inline void task_imu_update(void);
-static inline void task_gcu_update(void);
+static inline void task_res_update(void);
 static inline void task_tof_update(void);
 
-static Task_t critical_tasks[CRITICAL_TASK_COUNT] = {
+static Task_t critical_tasks[SYNC_TASK_COUNT] = {
     {"IMU", task_imu_update, HZ_TO_US(401), 0},
-    {"GCU", task_gcu_update, HZ_TO_US(211), 0},
+    {"RES", task_res_update, HZ_TO_US(211), 0},
     {"TOF", task_tof_update, HZ_TO_US(31), 0},
 };
 
 static inline void task_dbg_update(void);
 
-static Task_t background_tasks[BACKGROUND_TASK_COUNT] = {
+static Task_t background_tasks[ASYNC_TASK_COUNT] = {
     {"DBG", task_dbg_update, HZ_TO_US(1), 0},
 };
 

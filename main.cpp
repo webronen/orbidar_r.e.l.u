@@ -54,53 +54,39 @@ void setup(void)
 void loop(void)
 {
   NRF_TIMER0->TASKS_CAPTURE[0] = 1;
-  handle_tasks();
-  handle_serial();
-  NRF_TIMER0->TASKS_CAPTURE[1] = 1;
-  NRF_TIMER0->CC[3] = NRF_TIMER0->CC[1] - NRF_TIMER0->CC[0];
-}
-
-static inline void handle_tasks(void)
-{
   const uint32_t current_us = NRF_TIMER0->CC[0];
 
-  for (uint8_t j = 0; j < CRITICAL_TASK_COUNT; j++)
+  handle_tasks(current_us);
+  handle_serial();
+}
+
+static inline void handle_tasks(const uint32_t current_us)
+{
+  for (uint8_t i = 0; i < SYNC_TASK_COUNT; i++)
   {
-    if ((int32_t)(current_us - critical_tasks[j].previous_us) >= 0)
+    if ((int32_t)(current_us - critical_tasks[i].previous_us) >= 0)
     {
-      critical_tasks[j].previous_us += critical_tasks[j].interval_us;
-      NRF_TIMER0->TASKS_CAPTURE[1] = 1;
-      critical_tasks[j].task();
-      NRF_TIMER0->TASKS_CAPTURE[2] = 1;
-      critical_tasks[j].duration_us = NRF_TIMER0->CC[2] - NRF_TIMER0->CC[1];
-      if (critical_tasks[j].duration_us > critical_tasks[j].max_duration_us)
-        critical_tasks[j].max_duration_us = critical_tasks[j].duration_us;
+      critical_tasks[i].previous_us += critical_tasks[i].interval_us;
+      critical_tasks[i].task();
     }
   }
 
   static uint8_t i = 0;
-
-  if ((int32_t)(current_us - background_tasks[i].previous_us) >=
-      (int32_t)background_tasks[i].interval_us)
+  if ((int32_t)(current_us - background_tasks[i].previous_us) >= background_tasks[i].interval_us)
   {
     background_tasks[i].previous_us = current_us;
-    NRF_TIMER0->TASKS_CAPTURE[1] = 1;
     background_tasks[i].task();
-    NRF_TIMER0->TASKS_CAPTURE[2] = 1;
-    background_tasks[i].duration_us = NRF_TIMER0->CC[2] - NRF_TIMER0->CC[1];
-    if (background_tasks[i].duration_us > background_tasks[i].max_duration_us)
-      background_tasks[i].max_duration_us = background_tasks[i].duration_us;
   }
 
-  i = (i + 1) % BACKGROUND_TASK_COUNT;
+  i = (i + 1) % ASYNC_TASK_COUNT;
 }
 
 static inline void handle_serial(void)
 {
   if (Serial.available() > 0)
   {
-    const uint8_t type = (uint8_t)Serial.read() % REQUEST_TYPE_COUNT;
-    Serial.write((const uint8_t *)handle_response[type].ptr, (size_t)handle_response[type].size);
+    const uint8_t type = (const uint8_t)Serial.read() % REQUEST_TYPE_COUNT;
+    Serial.write((const uint8_t *)handle_response[type].ptr, (const size_t)handle_response[type].size);
   }
 }
 
@@ -111,12 +97,12 @@ static void vl53l4cx_select(const uint8_t channel)
   Wire.endTransmission();
 }
 
-static inline void task_gcu_update(void)
+static inline void task_imu_update(void)
 {
   sensortec.update();
 }
 
-static inline void task_imu_update(void)
+static inline void task_res_update(void)
 {
   float x = quaternion._data.x;
   float y = quaternion._data.y;
@@ -168,56 +154,5 @@ static inline void task_tof_update(void)
 
 static inline void task_dbg_update(void)
 {
-  const uint32_t loop_time_us = NRF_TIMER0->CC[3];
-  float loop_hz = (loop_time_us > 0)
-                      ? (1000000.0f / loop_time_us)
-                      : 0.0f;
-
-  printf("\n=== Scheduler Debug ===\n");
-  if (loop_time_us == 0)
-  {
-    printf("Loop Time: 0 us (N/A Hz)\n");
-  }
-  else
-  {
-    printf("Loop Time: %lu us (%.2f Hz)\n", loop_time_us, loop_hz);
-  }
-
-  printf("-------------------------------------------------------------------------------------\n");
-  printf("| Type       | ID | Exec(us) | Max(us) | Rate(Hz) | Load(%%) | Margin(%%) | Slack(us) |\n");
-  printf("-------------------------------------------------------------------------------------\n");
-
-  // Critical tasks
-  for (uint8_t i = 0; i < CRITICAL_TASK_COUNT; i++)
-  {
-    uint32_t exec = critical_tasks[i].duration_us;
-    uint32_t max = critical_tasks[i].max_duration_us;
-    uint32_t period = critical_tasks[i].interval_us;
-
-    float hz = (period > 0) ? (1000000.0f / period) : 0.0f;
-    float load = (period > 0) ? (exec * 100.0f) / period : 0.0f;
-    float margin = (period > 0) ? 100.0f - ((max * 100.0f) / period) : 0.0f;
-    int32_t slack = (period > exec) ? (period - exec) : 0;
-
-    printf("| Critical   | %2u | %8lu | %7lu | %8.2f | %7.2f | %8.2f | %9ld  |\n",
-           i, exec, max, hz, load, margin, (long)slack);
-  }
-
-  // Background tasks
-  for (uint8_t i = 0; i < BACKGROUND_TASK_COUNT; i++)
-  {
-    uint32_t exec = background_tasks[i].duration_us;
-    uint32_t max = background_tasks[i].max_duration_us;
-    uint32_t period = background_tasks[i].interval_us;
-
-    float hz = (period > 0) ? (1000000.0f / period) : 0.0f;
-    float load = (period > 0) ? (exec * 100.0f) / period : 0.0f;
-    float margin = (period > 0) ? 100.0f - ((max * 100.0f) / period) : 0.0f;
-    int32_t slack = (period > exec) ? (period - exec) : 0;
-
-    printf("| Background | %2u | %8lu | %7lu | %8.2f | %7.2f | %8.2f | %9ld  |\n",
-           i, exec, max, hz, load, margin, (long)slack);
-  }
-
-  printf("-------------------------------------------------------------------------------------\n");
+  // Non critical debug updates can be placed here
 }
