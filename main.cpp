@@ -111,10 +111,13 @@ static void vl53l4cx_select(const uint8_t channel)
   Wire.endTransmission();
 }
 
-static inline void task_imu_update(void)
+static inline void task_gcu_update(void)
 {
   sensortec.update();
+}
 
+static inline void task_imu_update(void)
+{
   float x = quaternion._data.x;
   float y = quaternion._data.y;
   float z = quaternion._data.z;
@@ -132,9 +135,9 @@ static inline void task_imu_update(void)
   const float pitch = (__builtin_atan2f(2.0f * (w * x + y * z), 1.0f - 2.0f * (x * x + y * y)) * RAD_TO_DEG) + 90.0f;
   const float roll = __builtin_asinf(2.0f * (w * y - x * z)) * RAD_TO_DEG;
 
-  response.orientation[0] += (response.orientation[0] - yaw) * YAW_LPF;
-  response.orientation[1] += (response.orientation[1] - pitch) * PITCH_LPF;
-  response.orientation[2] += (response.orientation[2] - roll) * ROLL_LPF;
+  response.orientation[0] += (yaw - response.orientation[0]) * YAW_LPF;
+  response.orientation[1] += (pitch - response.orientation[1]) * PITCH_LPF;
+  response.orientation[2] += (roll - response.orientation[2]) * ROLL_LPF;
 
   response.pressure += (pressure._value - response.pressure) * PRESSURE_LPF;
   response.humidity += (humidity._value - response.humidity) * HUMIDITY_LPF;
