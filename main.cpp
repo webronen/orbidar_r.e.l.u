@@ -126,8 +126,6 @@ static inline void task_res_update(void)
   const float roll = __builtin_asinf(2.0f * (w * y - x * z)) * RAD_TO_DEG;
   const float pitch = __builtin_atan2f(2.0f * (w * x + y * z), 1.0f - 2.0f * (x * x + y * y)) * RAD_TO_DEG;
 
-  printf("Yaw: %.2f, Pitch: %.2f, Roll: %.2f\r\n", yaw, pitch, roll);
-
   response.orientation[0] += (yaw - response.orientation[0]) * YAW_LPF;
   response.orientation[1] += (pitch - response.orientation[1]) * PITCH_LPF;
   response.orientation[2] += (roll - response.orientation[2]) * ROLL_LPF;
