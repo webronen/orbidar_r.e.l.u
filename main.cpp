@@ -75,8 +75,20 @@ static inline void handle_serial(void)
 {
   if (Serial.available() > 0)
   {
-    const uint8_t type = (uint8_t)Serial.read() % REQUEST_TYPE_COUNT;
-    Serial.write((const uint8_t *)handle_response[type].ptr, (size_t)handle_response[type].size);
+    const int byte = Serial.read();
+    if (byte < 0) return;
+
+    const uint8_t type = (uint8_t)byte % REQUEST_TYPE_COUNT;
+
+    if (handle_response[type].ptr && handle_response[type].size > 0)
+    {
+      Serial.write((const uint8_t *)handle_response[type].ptr, (size_t)handle_response[type].size);
+
+      if (type == 2)
+      {
+        vl53l4cx_map_index = (vl53l4cx_map_index + 1) % VL53L9CX_MAP_COUNT;
+      }
+    }
   }
 }
 
@@ -133,10 +145,22 @@ static inline void task_res_update(void)
   response.pressure += (pressure._value - response.pressure) * PRESSURE_LPF;
   response.humidity += (humidity._value - response.humidity) * HUMIDITY_LPF;
   response.temperature += (temperature._value - response.temperature) * TEMPERATURE_LPF;
+
+  // Calculate altitude using the barometric formula (ISA model, valid up to 11km)
+  response.altitude = 44330.0f * (1.0f - __builtin_powf(response.pressure / SEA_LEVEL_PRESSURE_HPA, 0.1903f));
+}
+
+static inline void task_cam_update(void)
+{
+  return; // Temporarily disable camera updates
+
+  // Camera update logic can be placed here
 }
 
 static inline void task_tof_update(void)
 {
+  return; // Temporarily disable TOF updates
+
   static uint8_t ready;
   static VL53L4CX_MultiRangingData_t data;
 
@@ -159,5 +183,11 @@ static inline void task_tof_update(void)
 
 static inline void task_dbg_update(void)
 {
-  // Non critical debug updates can be placed here
+  // Debug updates can be placed here
+
+  printf("Altitude: %.2f m, Pressure: %.2f hPa, Humidity: %.2f %%, Temperature: %.2f C\n",
+         response.altitude,
+         response.pressure,
+         response.humidity,
+         response.temperature);
 }
