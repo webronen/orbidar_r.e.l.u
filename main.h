@@ -29,6 +29,8 @@ VL53L4CX_UserRoi_t vl53l4cx_UserRoi = {6, 6, 9, 9};
 
 #define SEA_LEVEL_PRESSURE_HPA 1013.25f
 #define SEA_LEVEL_PRESSURE_HPA_INV (1.0f / SEA_LEVEL_PRESSURE_HPA)
+#define ISA_ALT_SCALE_F 44330.76923077f // T0 / L
+#define ISA_EXP_F 0.190263f             // (R * L) / g0
 
 #define SERIAL_BAUDRATE 115200
 #define HZ_TO_US(Hz) ((uint32_t)(1000000.0f / (Hz)))

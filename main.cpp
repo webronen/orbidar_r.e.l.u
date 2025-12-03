@@ -80,7 +80,8 @@ static inline void handle_serial(void)
   if (Serial.available() > 0)
   {
     const int byte = Serial.read();
-    if (byte < 0) return;
+    if (byte < 0)
+      return;
 
     const uint8_t type = (uint8_t)byte % REQUEST_TYPE_COUNT;
 
@@ -156,7 +157,7 @@ static inline void task_res_update(void)
   response.temperature += (temperature._value - response.temperature) * TEMPERATURE_LPF;
 
   // Calculate altitude using the barometric formula (ISA model, valid up to 11km)
-  response.altitude = 44330.0f * (1.0f - __builtin_powf(response.pressure / SEA_LEVEL_PRESSURE_HPA, 0.1903f));
+  response.altitude = ISA_ALT_SCALE_F * (1.0f - __builtin_powf(response.pressure * SEA_LEVEL_PRESSURE_HPA_INV, ISA_EXP_F));
 }
 
 static inline void task_cam_update(void)
