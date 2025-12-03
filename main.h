@@ -98,7 +98,7 @@ typedef struct __attribute__((packed, aligned(4)))
 
 static_assert(sizeof(SensorField_t) == 8, "SensorField_t struct must be 8 bytes (2 words)");
 
-static uint8_t vl53l4cx_map_index = 0;
+static uint8_t vl53l9cx_map_index = 0;
 
 static inline void handle_tasks(const uint32_t current_us);
 static inline void handle_serial(void);

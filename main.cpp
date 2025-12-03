@@ -84,9 +84,10 @@ static inline void handle_serial(void)
     {
       Serial.write((const uint8_t *)handle_response[type].ptr, (size_t)handle_response[type].size);
 
-      if (type == 2)
+      // Update VL53L9CX map index on full data or camera data request
+      if (type == 0 || type == 2)
       {
-        vl53l4cx_map_index = (vl53l4cx_map_index + 1) % VL53L9CX_MAP_COUNT;
+        vl53l9cx_map_index = (vl53l9cx_map_index + 1) % VL53L9CX_MAP_COUNT;
       }
     }
   }
