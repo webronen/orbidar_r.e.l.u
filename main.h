@@ -32,7 +32,7 @@ VL53L4CX_UserRoi_t vl53l4cx_UserRoi = {6, 6, 9, 9};
 #define TCA9548A_ADDR 0x70
 #define VL53L4CX_I2C_SPEED 400000
 #define VL53L4CX_COUNT 8
-#define SYNC_TASK_COUNT 3
+#define SYNC_TASK_COUNT 2
 #define ASYNC_TASK_COUNT 1
 #define REQUEST_TYPE_COUNT 9
 #define PA_TO_HPA 0.01f
@@ -120,7 +120,7 @@ static inline void task_tof_update(void);
 static Task_t critical_tasks[SYNC_TASK_COUNT] = {
     {"IMU", task_imu_update, HZ_TO_US(401), 0},
     {"RES", task_res_update, HZ_TO_US(211), 0},
-    {"TOF", task_tof_update, HZ_TO_US(31), 0},
+    // {"TOF", task_tof_update, HZ_TO_US(31), 0},
 };
 
 static inline void task_dbg_update(void);
