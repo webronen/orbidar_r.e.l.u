@@ -108,7 +108,7 @@ static inline void task_res_update(void)
   static uint16_t samples = 0;
   static DataQuaternion _q = {0.0f, 0.0f, 0.0f, 1.0f};
 
-  if (!calibrated && ++samples >= 422)
+  if (!calibrated && ++samples >= 211)
   {
     _q.x = -quaternion._data.x;
     _q.y = -quaternion._data.y;
