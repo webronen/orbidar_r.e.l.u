@@ -21,20 +21,22 @@ void setup(void)
   temperature.begin(TEMPERATURE_RATE_HZ, TEMPERATURE_LATENCY_MS);
   quaternion.begin(QUATERNION_RATE_HZ, QUATERNION_LATENCY_MS);
 
-  // Wire.begin();
-  // Wire.setClock(VL53L4CX_I2C_SPEED);
+  Wire.begin();
+  Wire.setClock(VL53L4CX_I2C_SPEED);
 
-  // for (uint8_t i = 0; i < VL53L4CX_COUNT; i++)
-  // {
-  //   vl53l4cx_select(i);
-  //   vl53l4cx.VL53L4CX_SetDeviceAddress(VL53L4CX_DEFAULT_DEVICE_ADDRESS);
-  //   vl53l4cx.VL53L4CX_WaitDeviceBooted();
-  //   vl53l4cx.VL53L4CX_DataInit();
-  //   vl53l4cx.VL53L4CX_SetDistanceMode(VL53L4CX_DISTANCEMODE_MEDIUM);
-  //   vl53l4cx.VL53L4CX_SetMeasurementTimingBudgetMicroSeconds(33000);
-  //   vl53l4cx.VL53L4CX_SetUserROI(&vl53l4cx_UserRoi);
-  //   vl53l4cx.VL53L4CX_StartMeasurement();
-  // }
+  for (uint8_t i = 0; i < VL53L4CX_COUNT; i++)
+  {
+    continue; // Temporarily disable TCA9548A switching
+
+    vl53l4cx_select(i);
+    vl53l4cx.VL53L4CX_SetDeviceAddress(VL53L4CX_DEFAULT_DEVICE_ADDRESS);
+    vl53l4cx.VL53L4CX_WaitDeviceBooted();
+    vl53l4cx.VL53L4CX_DataInit();
+    vl53l4cx.VL53L4CX_SetDistanceMode(VL53L4CX_DISTANCEMODE_MEDIUM);
+    vl53l4cx.VL53L4CX_SetMeasurementTimingBudgetMicroSeconds(33000);
+    vl53l4cx.VL53L4CX_SetUserROI(&vl53l4cx_UserRoi);
+    vl53l4cx.VL53L4CX_StartMeasurement();
+  }
 
   Serial.begin(SERIAL_BAUDRATE);
   while (!Serial)
@@ -52,6 +54,7 @@ void loop(void)
 
 static inline void handle_tasks(const uint32_t current_us)
 {
+  // Handle synchronous (critical) tasks
   for (uint8_t i = 0; i < SYNC_TASK_COUNT; i++)
   {
     if ((int32_t)(current_us - critical_tasks[i].previous_us) >= 0)
@@ -61,6 +64,7 @@ static inline void handle_tasks(const uint32_t current_us)
     }
   }
 
+  // Handle asynchronous (background) tasks
   static uint8_t i = 0;
   if ((int32_t)(current_us - background_tasks[i].previous_us) >= (int32_t)background_tasks[i].interval_us)
   {
@@ -68,7 +72,7 @@ static inline void handle_tasks(const uint32_t current_us)
     background_tasks[i].task();
   }
 
-  i = (i + 1) % ASYNC_TASK_COUNT;
+  i = (i + 1) % ASYNC_TASK_COUNT; // Move to the next background task for the next call (round-robin scheduling)
 }
 
 static inline void handle_serial(void)
@@ -87,7 +91,7 @@ static inline void handle_serial(void)
       // Update VL53L9CX map index on full data or camera data request
       if (type == 0 || type == 2)
       {
-        vl53l9cx_map_index = (vl53l9cx_map_index + 1) % VL53L9CX_MAP_COUNT;
+        vl53l9cx_map_index = (vl53l9cx_map_index + 1) % VL53L9CX_MAP_COUNT; // Cycle through map indices 0, 1, 2 (round-robin scheduling)
       }
     }
   }
@@ -108,9 +112,10 @@ static inline void task_imu_update(void)
 static inline void task_res_update(void)
 {
   static bool calibrated = false;
-  static uint16_t samples = 0;
+  static uint8_t samples = 0;
   static DataQuaternion _q = {0.0f, 0.0f, 0.0f, 1.0f};
 
+  // Calibrate on first 211 samples (~1 second at 211 Hz)
   if (!calibrated && ++samples >= 211)
   {
     _q.x = -quaternion._data.x;
@@ -120,6 +125,7 @@ static inline void task_res_update(void)
     calibrated = true;
   }
 
+  // Apply calibration quaternion to current quaternion using Hamilton product
   const DataQuaternion q = quaternion._data;
 
   float x = q.w * _q.x + q.x * _q.w + q.y * _q.z - q.z * _q.y;
@@ -127,6 +133,7 @@ static inline void task_res_update(void)
   float z = q.w * _q.z + q.x * _q.y - q.y * _q.x + q.z * _q.w;
   float w = q.w * _q.w - q.x * _q.x - q.y * _q.y - q.z * _q.z;
 
+  // Normalize quaternion and convert to Euler angles (yaw, pitch, roll)
   const float mag = x * x + y * y + z * z + w * w;
   const float inv = 1.0f / __builtin_sqrtf(mag + __FLT_EPSILON__);
 
@@ -139,6 +146,7 @@ static inline void task_res_update(void)
   const float roll = __builtin_asinf(2.0f * (w * y - x * z)) * RAD_TO_DEG;
   const float pitch = __builtin_atan2f(2.0f * (w * x + y * z), 1.0f - 2.0f * (x * x + y * y)) * RAD_TO_DEG;
 
+  // Apply EMA filtering to orientation and environmental data
   response.orientation[0] += (yaw - response.orientation[0]) * YAW_LPF;
   response.orientation[1] += (pitch - response.orientation[1]) * PITCH_LPF;
   response.orientation[2] += (roll - response.orientation[2]) * ROLL_LPF;
@@ -174,21 +182,18 @@ static inline void task_tof_update(void)
         data.NumberOfObjectsFound > 0 &&
         data.RangeData[0].RangeStatus == 0)
     {
+      // Apply EMA filtering to distance data
       response.distance[i] += (data.RangeData[0].RangeMilliMeter - response.distance[i]) * DISTANCE_LPF;
     }
     vl53l4cx.VL53L4CX_ClearInterruptAndStartMeasurement();
   }
 
-  i = (i + 1) % VL53L4CX_COUNT;
+  i = (i + 1) % VL53L4CX_COUNT; // Move to the next VL53L4CX sensor for the next call (round-robin scheduling)
 }
 
 static inline void task_dbg_update(void)
 {
-  // Debug updates can be placed here
+  return; // Temporarily disable debug updates
 
-  printf("Altitude: %.2f m, Pressure: %.2f hPa, Humidity: %.2f %%, Temperature: %.2f C\n",
-         response.altitude,
-         response.pressure,
-         response.humidity,
-         response.temperature);
+  // Debug updates can be placed here
 }
