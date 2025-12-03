@@ -16,19 +16,9 @@ void setup(void)
   nicla::disableLDO();
 
   sensortec.begin();
-  accelerometer.begin(ACCELEROMETER_RATE_HZ, ACCELEROMETER_LATENCY_MS);
-  accelerometer.setRange(ACCELEROMETER_RANGE_G);
-
-  gyroscope.begin(GYROSCOPE_RATE_HZ, GYROSCOPE_LATENCY_MS);
-  gyroscope.setRange(GYROSCOPE_RANGE_DPS);
-
-  magnetometer.begin(MAGNETOMETER_RATE_HZ, MAGNETOMETER_LATENCY_MS);
-  magnetometer.setRange(MAGNETOMETER_RANGE_UT);
-
   pressure.begin(PRESSURE_RATE_HZ, PRESSURE_LATENCY_MS);
   humidity.begin(HUMIDITY_RATE_HZ, HUMIDITY_LATENCY_MS);
   temperature.begin(TEMPERATURE_RATE_HZ, TEMPERATURE_LATENCY_MS);
-
   quaternion.begin(QUATERNION_RATE_HZ, QUATERNION_LATENCY_MS);
 
   // Wire.begin();
