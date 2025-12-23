@@ -86,11 +86,9 @@ typedef struct __attribute__((packed, aligned(4)))
   void (*task)(void);
   const uint32_t interval_us;
   uint32_t previous_us;
-  uint32_t duration_us;
-  uint32_t max_duration_us;
 } Task_t;
 
-static_assert(sizeof(Task_t) == 24, "Task_t struct size must be 24 bytes (6 words)");
+static_assert(sizeof(Task_t) == 16, "Task_t struct size must be 16 bytes (4 words)");
 
 typedef struct __attribute__((packed, aligned(4)))
 {
