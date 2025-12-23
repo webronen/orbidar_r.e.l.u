@@ -82,13 +82,12 @@ static_assert(sizeof(SensorValues_t) == 4580, "SensorValues_t struct size must b
 
 typedef struct __attribute__((packed, aligned(4)))
 {
-  const char *name;
   void (*task)(void);
   const uint32_t interval_us;
   uint32_t previous_us;
 } Task_t;
 
-static_assert(sizeof(Task_t) == 16, "Task_t struct size must be 16 bytes (4 words)");
+static_assert(sizeof(Task_t) == 12, "Task_t struct size must be 12 bytes (3 words)");
 
 typedef struct __attribute__((packed, aligned(4)))
 {
@@ -112,16 +111,16 @@ static inline void task_cam_update(void);
 static inline void task_dst_update(void);
 
 static Task_t critical_tasks[SYNC_TASK_COUNT] = {
-    {"IMU", task_imu_update, HZ_TO_US(401), 0},
-    {"RES", task_res_update, HZ_TO_US(211), 0},
-    {"CAM", task_cam_update, HZ_TO_US(61), 0},
-    {"DST", task_dst_update, HZ_TO_US(5), 0},
+    {task_imu_update, HZ_TO_US(401)},
+    {task_res_update, HZ_TO_US(211)},
+    {task_cam_update, HZ_TO_US(61)},
+    {task_dst_update, HZ_TO_US(5)},
 };
 
 static inline void task_dbg_update(void);
 
 static Task_t background_tasks[ASYNC_TASK_COUNT] = {
-    {"DBG", task_dbg_update, HZ_TO_US(1), 0},
+    {task_dbg_update, HZ_TO_US(1)},
 };
 
 static SensorValues_t response{
