@@ -105,7 +105,7 @@ static const uint8_t vl53l4cx_address[7] = {
 
 static inline void handle_tasks(const uint32_t current_us);
 static inline void handle_serial(void);
-static inline void xshut_set(int8_t pin, bool level);
+static inline void xshut_set(const int8_t pin, const bool level);
 static inline void vl53l4cx_init(void);
 
 static inline void task_imu_update(void);

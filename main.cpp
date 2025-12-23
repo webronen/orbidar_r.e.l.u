@@ -89,7 +89,7 @@ static inline void handle_serial(void)
   }
 }
 
-static inline void xshut_set(int8_t pin, bool level)
+static inline void xshut_set(const int8_t pin, const bool level)
 {
   static uint8_t state = 0;
   state = level ? state | (1 << pin) : state & ~(1 << pin);
