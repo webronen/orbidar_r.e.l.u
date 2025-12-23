@@ -117,7 +117,7 @@ static Task_t critical_tasks[SYNC_TASK_COUNT] = {
     {"IMU", task_imu_update, HZ_TO_US(401), 0},
     {"RES", task_res_update, HZ_TO_US(211), 0},
     {"CAM", task_cam_update, HZ_TO_US(61), 0},
-    {"DST", task_dst_update, HZ_TO_US(31), 0},
+    {"DST", task_dst_update, HZ_TO_US(5), 0},
 };
 
 static inline void task_dbg_update(void);
