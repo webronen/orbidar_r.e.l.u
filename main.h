@@ -23,7 +23,7 @@ SensorQuaternion quaternion(BHY2_SENSOR_ID_RV);
 
 #include <vl53l4cx_class.h>
 VL53L4CX vl53l4cx(&Wire, NC);
-VL53L4CX_UserRoi_t vl53l4cx_UserRoi = {6, 6, 9, 9}; // Centered 4x4 ROI
+VL53L4CX_UserRoi_t vl53l4cx_UserRoi = {6, 6, 9, 9};
 
 #define SEA_LEVEL_PRESSURE_HPA 1013.25f
 #define SEA_LEVEL_PRESSURE_HPA_INV (1.0f / SEA_LEVEL_PRESSURE_HPA)
