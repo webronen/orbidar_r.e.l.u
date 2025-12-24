@@ -82,7 +82,7 @@ static_assert(sizeof(SensorValues_t) == 4580, "SensorValues_t struct size must b
 
 typedef struct __attribute__((packed, aligned(4)))
 {
-  void (*task)(void);
+  const void (*task)(void);
   const uint32_t interval_us;
   uint32_t previous_us;
 } Task_t;
@@ -92,7 +92,8 @@ static_assert(sizeof(Task_t) == 12, "Task_t struct size must be 12 bytes (3 word
 typedef struct __attribute__((packed, aligned(4)))
 {
   const uint8_t *ptr;
-  size_t size;
+  const uint16_t size;
+  const uint8_t reserved[2]; // Padding for 4-byte alignment
 } SensorField_t;
 
 static_assert(sizeof(SensorField_t) == 8, "SensorField_t struct must be 8 bytes (2 words)");
@@ -103,24 +104,24 @@ static const uint8_t vl53l4cx_address[7] = {
 static inline void handle_tasks(const uint32_t current_us);
 static inline void handle_serial(void);
 static inline void xshut_set(const int8_t pin, const bool level);
-static inline void vl53l4cx_init(void);
+static inline void distance_init(void);
 
-static inline void task_imu_update(void);
-static inline void task_res_update(void);
-static inline void task_cam_update(void);
-static inline void task_dst_update(void);
+static inline void sync_task_inertial(void);
+static inline void sync_task_response(void);
+static inline void sync_task_camera(void);
+static inline void sync_task_distance(void);
 
 static Task_t critical_tasks[SYNC_TASK_COUNT] = {
-    {task_imu_update, HZ_TO_US(401)},
-    {task_res_update, HZ_TO_US(211)},
-    {task_cam_update, HZ_TO_US(61)},
-    {task_dst_update, HZ_TO_US(31)},
+    {(const void (*)())sync_task_inertial, (const uint32_t)HZ_TO_US(401)},
+    {(const void (*)())sync_task_response, (const uint32_t)HZ_TO_US(211)},
+    {(const void (*)())sync_task_camera, (const uint32_t)HZ_TO_US(61)},
+    {(const void (*)())sync_task_distance, (const uint32_t)HZ_TO_US(31)},
 };
 
-static inline void task_dbg_update(void);
+static inline void async_task_debug(void);
 
 static Task_t background_tasks[ASYNC_TASK_COUNT] = {
-    {task_dbg_update, HZ_TO_US(1)},
+    {(const void (*)())async_task_debug, (const uint32_t)HZ_TO_US(1)},
 };
 
 static SensorValues_t response{
@@ -134,14 +135,14 @@ static SensorValues_t response{
 };
 
 static const SensorField_t handle_response[REQUEST_TYPE_COUNT] = {
-    {(const uint8_t *)&response, sizeof(SensorValues_t)},                   // 0x00: Full response
-    {(const uint8_t *)&response.altitude, sizeof(response.altitude)},       // 0x01: Altitude only
-    {(const uint8_t *)&response.humidity, sizeof(response.humidity)},       // 0x02: Humidity only
-    {(const uint8_t *)&response.orientation, sizeof(response.orientation)}, // 0x03: Orientation only
-    {(const uint8_t *)&response.pressure, sizeof(response.pressure)},       // 0x04: Pressure only
-    {(const uint8_t *)&response.temperature, sizeof(response.temperature)}, // 0x05: Temperature only
-    {(const uint8_t *)&response.camera, sizeof(response.camera)},           // 0x06: Camera only
-    {(const uint8_t *)&response.distance, sizeof(response.distance)},       // 0x07: Radial only
+    {(const uint8_t *)&response, (const uint16_t)sizeof(SensorValues_t)},                   // 0x00: Full response
+    {(const uint8_t *)&response.altitude, (const uint16_t)sizeof(response.altitude)},       // 0x01: Altitude only
+    {(const uint8_t *)&response.humidity, (const uint16_t)sizeof(response.humidity)},       // 0x02: Humidity only
+    {(const uint8_t *)&response.orientation, (const uint16_t)sizeof(response.orientation)}, // 0x03: Orientation only
+    {(const uint8_t *)&response.pressure, (const uint16_t)sizeof(response.pressure)},       // 0x04: Pressure only
+    {(const uint8_t *)&response.temperature, (const uint16_t)sizeof(response.temperature)}, // 0x05: Temperature only
+    {(const uint8_t *)&response.camera, (const uint16_t)sizeof(response.camera)},           // 0x06: Camera only
+    {(const uint8_t *)&response.distance, (const uint16_t)sizeof(response.distance)},       // 0x07: Radial only
 };
 
 #endif // MAIN_H

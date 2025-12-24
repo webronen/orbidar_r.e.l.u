@@ -29,19 +29,19 @@ void setup(void)
   nicla::enable3V3LDO();
   nrf_delay_ms(100);
 
-  vl53l4cx_init();
+  distance_init();
 
   Serial.begin(SERIAL_BAUDRATE);
   while (!Serial)
     ;
 
   printf("I2C Scanner:\n");
-  for (uint8_t addr = 1; addr < 127; addr++)
+  for (uint8_t i = 1; i < 127; i++)
   {
-    Wire.beginTransmission(addr);
+    Wire.beginTransmission(i);
     if (!Wire.endTransmission(true))
     {
-      printf("Found device at 0x%02X\n", addr);
+      printf("Found device at 0x%02X\n", i);
     }
   }
   printf("Scan complete.\n");
@@ -70,7 +70,7 @@ static inline void handle_tasks(const uint32_t current_us)
 
   // Handle asynchronous (background) tasks
   static uint8_t i = 0;
-  if ((int32_t)(current_us - background_tasks[i].previous_us) >= (int32_t)background_tasks[i].interval_us)
+  if ((int32_t)(current_us - background_tasks[i].previous_us) >= background_tasks[i].interval_us)
   {
     background_tasks[i].previous_us = current_us;
     background_tasks[i].task();
@@ -99,26 +99,26 @@ static inline void xshut_set(const int8_t pin, const bool level)
   Wire.endTransmission(true);
 }
 
-static inline void vl53l4cx_init(void)
+static inline void distance_init(void)
 {
-  for (uint8_t sensor = 0; sensor < VL53L4CX_COUNT; sensor++)
+  for (uint8_t i = 0; i < VL53L4CX_COUNT; i++)
   {
-    xshut_set(sensor, HIGH);                                      // Enable current sensor
-    vl53l4cx.changeI2cAddress(VL53L4CX_DEFAULT_DEVICE_ADDRESS);   // Set default I2C address
-    vl53l4cx.VL53L4CX_WaitDeviceBooted();                         // Wait for sensor to boot
-    vl53l4cx.VL53L4CX_SetDeviceAddress(vl53l4cx_address[sensor]); // Set unique I2C address
-    vl53l4cx.VL53L4CX_WaitDeviceBooted();                         // Wait for sensor to reboot with new address
-    vl53l4cx.VL53L4CX_DataInit();                                 // Initialize sensor (Distance mode medium, 33ms timing budget)
-    vl53l4cx.VL53L4CX_SetUserROI(&vl53l4cx_UserRoi);              // Set centered 4x4 ROI
+    xshut_set(i, HIGH);                                         // Enable current sensor
+    vl53l4cx.changeI2cAddress(VL53L4CX_DEFAULT_DEVICE_ADDRESS); // Set default I2C address
+    vl53l4cx.VL53L4CX_WaitDeviceBooted();                       // Wait for sensor to boot
+    vl53l4cx.VL53L4CX_SetDeviceAddress(vl53l4cx_address[i]);    // Set unique I2C address
+    vl53l4cx.VL53L4CX_WaitDeviceBooted();                       // Wait for sensor to reboot with new address
+    vl53l4cx.VL53L4CX_DataInit();                               // Initialize sensor (Distance mode medium, 33ms timing budget)
+    vl53l4cx.VL53L4CX_SetUserROI(&vl53l4cx_UserRoi);            // Set centered 4x4 ROI
   }
 }
 
-static inline void task_imu_update(void)
+static inline void sync_task_inertial(void)
 {
   sensortec.update();
 }
 
-static inline void task_res_update(void)
+static inline void sync_task_response(void)
 {
   DataQuaternion q = quaternion._data;
 
@@ -149,41 +149,44 @@ static inline void task_res_update(void)
   response.altitude = ISA_ALT_SCALE_F * (1.0f - __builtin_powf(response.pressure * SEA_LEVEL_PRESSURE_HPA_INV, ISA_EXP_F));
 }
 
-static inline void task_cam_update(void)
+static inline void sync_task_camera(void)
 {
   return;
 }
 
-static inline void task_dst_update(void)
+static inline void sync_task_distance(void)
 {
-  static bool measuring = false;
-  static uint8_t sensor = 0;
+  static bool started = false;
+  static uint8_t i = 0;
+  static uint8_t ready = 0;
+  static VL53L4CX_MultiRangingData_t data;
 
-  if (!measuring)
+  if (!started)
   {
-    vl53l4cx.changeI2cAddress(vl53l4cx_address[sensor]);
-    measuring = !vl53l4cx.VL53L4CX_StartMeasurement();
+    vl53l4cx.changeI2cAddress(vl53l4cx_address[i]);
+    started = !vl53l4cx.VL53L4CX_StartMeasurement();
     return;
   }
 
-  uint8_t ready = 0;
-  if (!vl53l4cx.VL53L4CX_GetMeasurementDataReady(&ready) && ready)
+  if (vl53l4cx.VL53L4CX_GetMeasurementDataReady(&ready) == VL53L4CX_ERROR_NONE && ready)
   {
-    VL53L4CX_MultiRangingData_t data;
     if (vl53l4cx.VL53L4CX_GetMultiRangingData(&data) == VL53L4CX_ERROR_NONE &&
         data.NumberOfObjectsFound > 0 &&
         data.RangeData[0].RangeStatus == 0)
     {
-      response.distance[sensor] += (data.RangeData[0].RangeMilliMeter - response.distance[sensor]) * DIST_LPF;
-      vl53l4cx.VL53L4CX_ClearInterruptAndStartMeasurement();
-      vl53l4cx.VL53L4CX_StopMeasurement();
-      measuring = false;
-      sensor = (sensor + 1) % VL53L4CX_COUNT;
+      response.distance[i] += (data.RangeData[0].RangeMilliMeter - response.distance[i]) * DIST_LPF;
     }
+
+    vl53l4cx.VL53L4CX_ClearInterruptAndStartMeasurement();
+    vl53l4cx.VL53L4CX_StopMeasurement();
+
+    i = (i + 1) % VL53L4CX_COUNT;
+    vl53l4cx.changeI2cAddress(vl53l4cx_address[i]);
+    vl53l4cx.VL53L4CX_StartMeasurement();
   }
 }
 
-static inline void task_dbg_update(void)
+static inline void async_task_debug(void)
 {
   return;
 }
