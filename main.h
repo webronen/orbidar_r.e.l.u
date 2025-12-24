@@ -22,7 +22,7 @@ SensorQuaternion quaternion(BHY2_SENSOR_ID_RV);
 #endif
 
 #include <vl53l4cx_class.h>
-VL53L4CX vl53l4cx(&Wire, -1);
+VL53L4CX vl53l4cx(&Wire, NC);
 VL53L4CX_UserRoi_t vl53l4cx_UserRoi = {6, 6, 9, 9}; // Centered 4x4 ROI
 
 #define SEA_LEVEL_PRESSURE_HPA 1013.25f
@@ -31,13 +31,15 @@ VL53L4CX_UserRoi_t vl53l4cx_UserRoi = {6, 6, 9, 9}; // Centered 4x4 ROI
 #define ISA_EXP_F 0.190263f
 
 #define SERIAL_BAUDRATE 115200
+
 #define HZ_TO_US(Hz) ((uint32_t)(1000000.0f / (Hz)))
 #define KHZ_TO_HZ(kHz) ((uint32_t)((kHz) * 1000))
+
+#define PCF8574_ADDRESS 0x20
+
 #define VL53L9CX_ZONE_WIDTH 54
 #define VL53L9CX_ZONE_HEIGHT 42
 #define VL53L9CX_ZONES (VL53L9CX_ZONE_WIDTH * VL53L9CX_ZONE_HEIGHT)
-#define VL53L4CX_COUNT 7
-#define PCF8574_ADDRESS 0x20
 #define VL53L4CX_COUNT 7
 
 #define SYNC_TASK_COUNT 4
@@ -49,15 +51,14 @@ VL53L4CX_UserRoi_t vl53l4cx_UserRoi = {6, 6, 9, 9}; // Centered 4x4 ROI
 
 #define PRESSURE_RATE_HZ 2
 #define PRESSURE_LATENCY_MS 1000
-
 #define TEMPERATURE_RATE_HZ 2
 #define TEMPERATURE_LATENCY_MS 1000
 
 #define QUATERNION_RATE_HZ 400
 #define QUATERNION_LATENCY_MS 1
 
-#define CAM_LPF 0.75f
-#define DIST_LPF 0.75f
+#define CAMERA_LPF 0.75f
+#define DISTANCE_LPF 0.75f
 #define YAW_LPF 0.75f
 #define PITCH_LPF 0.75f
 #define ROLL_LPF 0.75f
@@ -66,7 +67,7 @@ VL53L4CX_UserRoi_t vl53l4cx_UserRoi = {6, 6, 9, 9}; // Centered 4x4 ROI
 #define PRESSURE_LPF 0.25f
 #define TEMPERATURE_LPF 0.25f
 
-typedef struct __attribute__((packet, aligned(4)))
+typedef struct __attribute__((packed, aligned(4)))
 {
   float altitude;                    // meters (m)
   float humidity;                    // percentage (%)
@@ -82,7 +83,7 @@ static_assert(sizeof(SensorValues_t) == 4580, "SensorValues_t struct size must b
 
 typedef struct __attribute__((packed, aligned(4)))
 {
-  const void (*task)(void);
+  void (*task)(void);
   const uint32_t interval_us;
   uint32_t previous_us;
 } Task_t;
@@ -104,7 +105,7 @@ static const uint8_t vl53l4cx_address[7] = {
 static inline void handle_tasks(const uint32_t current_us);
 static inline void handle_serial(void);
 static inline void xshut_set(const int8_t pin, const bool level);
-static inline void distance_init(void);
+static inline void vl53l4cx_init(void);
 
 static inline void sync_task_inertial(void);
 static inline void sync_task_response(void);
@@ -112,16 +113,16 @@ static inline void sync_task_camera(void);
 static inline void sync_task_distance(void);
 
 static Task_t critical_tasks[SYNC_TASK_COUNT] = {
-    {(const void (*)())sync_task_inertial, (const uint32_t)HZ_TO_US(401)},
-    {(const void (*)())sync_task_response, (const uint32_t)HZ_TO_US(211)},
-    {(const void (*)())sync_task_camera, (const uint32_t)HZ_TO_US(61)},
-    {(const void (*)())sync_task_distance, (const uint32_t)HZ_TO_US(31)},
+    {(void (*)())sync_task_inertial, (const uint32_t)HZ_TO_US(401)},
+    {(void (*)())sync_task_response, (const uint32_t)HZ_TO_US(211)},
+    {(void (*)())sync_task_camera, (const uint32_t)HZ_TO_US(61)},
+    {(void (*)())sync_task_distance, (const uint32_t)HZ_TO_US(31)},
 };
 
 static inline void async_task_debug(void);
 
 static Task_t background_tasks[ASYNC_TASK_COUNT] = {
-    {(const void (*)())async_task_debug, (const uint32_t)HZ_TO_US(1)},
+    {(void (*)())async_task_debug, (const uint32_t)HZ_TO_US(1)},
 };
 
 static SensorValues_t response{

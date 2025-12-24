@@ -6,8 +6,7 @@ void setup(void)
   nicla::disableCharging();
   nicla::setBatteryNTCEnabled(false);
   nicla::disableLDO();
-  nrf_delay_ms(100);
-
+  
   NRF_CLOCK->TASKS_HFCLKSTART = 1;
   while (!NRF_CLOCK->EVENTS_HFCLKSTARTED)
     ;
@@ -24,12 +23,12 @@ void setup(void)
 
   Wire.begin();
   Wire.setClock(KHZ_TO_HZ(400));
-  xshut_set(NC, false); // Disable all ToF sensors
+  xshut_set(NC, false);
 
   nicla::enable3V3LDO();
   nrf_delay_ms(100);
 
-  distance_init();
+  vl53l4cx_init();
 
   Serial.begin(SERIAL_BAUDRATE);
   while (!Serial)
@@ -40,9 +39,7 @@ void setup(void)
   {
     Wire.beginTransmission(i);
     if (!Wire.endTransmission(true))
-    {
       printf("Found device at 0x%02X\n", i);
-    }
   }
   printf("Scan complete.\n");
 }
@@ -58,7 +55,6 @@ void loop(void)
 
 static inline void handle_tasks(const uint32_t current_us)
 {
-  // Handle synchronous (critical) tasks
   for (uint8_t i = 0; i < SYNC_TASK_COUNT; i++)
   {
     if ((int32_t)(current_us - critical_tasks[i].previous_us) >= 0)
@@ -68,25 +64,21 @@ static inline void handle_tasks(const uint32_t current_us)
     }
   }
 
-  // Handle asynchronous (background) tasks
   static uint8_t i = 0;
-  if ((int32_t)(current_us - background_tasks[i].previous_us) >= background_tasks[i].interval_us)
+  if ((int32_t)(current_us - background_tasks[i].previous_us) >= (int32_t)background_tasks[i].interval_us)
   {
     background_tasks[i].previous_us = current_us;
     background_tasks[i].task();
   }
 
-  i = (i + 1) % ASYNC_TASK_COUNT; // Move to the next background task for the next call (round-robin scheduling)
+  i = (i + 1) % ASYNC_TASK_COUNT;
 }
 
 static inline void handle_serial(void)
 {
-  if (Serial.available() > 0)
-  {
-    const int type = Serial.read();
-    if (type >= 0 && type < REQUEST_TYPE_COUNT)
-      Serial.write(handle_response[type].ptr, handle_response[type].size);
-  }
+  const int type = Serial.read();
+  if (type >= 0 && type < REQUEST_TYPE_COUNT)
+    Serial.write(handle_response[type].ptr, handle_response[type].size);
 }
 
 static inline void xshut_set(const int8_t pin, const bool level)
@@ -99,17 +91,17 @@ static inline void xshut_set(const int8_t pin, const bool level)
   Wire.endTransmission(true);
 }
 
-static inline void distance_init(void)
+static inline void vl53l4cx_init(void)
 {
   for (uint8_t i = 0; i < VL53L4CX_COUNT; i++)
   {
-    xshut_set(i, HIGH);                                         // Enable current sensor
-    vl53l4cx.changeI2cAddress(VL53L4CX_DEFAULT_DEVICE_ADDRESS); // Set default I2C address
-    vl53l4cx.VL53L4CX_WaitDeviceBooted();                       // Wait for sensor to boot
-    vl53l4cx.VL53L4CX_SetDeviceAddress(vl53l4cx_address[i]);    // Set unique I2C address
-    vl53l4cx.VL53L4CX_WaitDeviceBooted();                       // Wait for sensor to reboot with new address
-    vl53l4cx.VL53L4CX_DataInit();                               // Initialize sensor (Distance mode medium, 33ms timing budget)
-    vl53l4cx.VL53L4CX_SetUserROI(&vl53l4cx_UserRoi);            // Set centered 4x4 ROI
+    xshut_set(i, HIGH);
+    vl53l4cx.changeI2cAddress(VL53L4CX_DEFAULT_DEVICE_ADDRESS);
+    vl53l4cx.VL53L4CX_WaitDeviceBooted();
+    vl53l4cx.VL53L4CX_SetDeviceAddress(vl53l4cx_address[i]);
+    vl53l4cx.VL53L4CX_WaitDeviceBooted();
+    vl53l4cx.VL53L4CX_DataInit();
+    vl53l4cx.VL53L4CX_SetUserROI(&vl53l4cx_UserRoi);
   }
 }
 
@@ -122,7 +114,6 @@ static inline void sync_task_response(void)
 {
   DataQuaternion q = quaternion._data;
 
-  // Normalize quaternion
   const float mag = q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
   const float inv = 1.0f / __builtin_sqrtf(mag + __FLT_EPSILON__);
 
@@ -131,12 +122,10 @@ static inline void sync_task_response(void)
   q.z *= inv;
   q.w *= inv;
 
-  // Convert quaternion to Euler angles (yaw, pitch, roll) in degrees
   const float yaw = __builtin_atan2f(2.0f * (q.w * q.z + q.x * q.y), 1.0f - 2.0f * (q.y * q.y + q.z * q.z)) * RAD_TO_DEG;
   const float roll = __builtin_asinf(2.0f * (q.w * q.y - q.x * q.z)) * RAD_TO_DEG;
   const float pitch = __builtin_atan2f(2.0f * (q.w * q.x + q.y * q.z), 1.0f - 2.0f * (q.x * q.x + q.y * q.y)) * RAD_TO_DEG;
 
-  // Apply EMA filtering to orientation and environmental data
   response.orientation[0] += (yaw - response.orientation[0]) * YAW_LPF;
   response.orientation[1] += (pitch - response.orientation[1]) * PITCH_LPF;
   response.orientation[2] += (roll - response.orientation[2]) * ROLL_LPF;
@@ -145,7 +134,6 @@ static inline void sync_task_response(void)
   response.humidity += (humidity._value - response.humidity) * HUMIDITY_LPF;
   response.temperature += (temperature._value - response.temperature) * TEMPERATURE_LPF;
 
-  // Calculate altitude using the barometric formula (ISA model, valid up to 11km)
   response.altitude = ISA_ALT_SCALE_F * (1.0f - __builtin_powf(response.pressure * SEA_LEVEL_PRESSURE_HPA_INV, ISA_EXP_F));
 }
 
@@ -174,7 +162,7 @@ static inline void sync_task_distance(void)
         data.NumberOfObjectsFound > 0 &&
         data.RangeData[0].RangeStatus == 0)
     {
-      response.distance[i] += (data.RangeData[0].RangeMilliMeter - response.distance[i]) * DIST_LPF;
+      response.distance[i] += (data.RangeData[0].RangeMilliMeter - response.distance[i]) * DISTANCE_LPF;
     }
 
     vl53l4cx.VL53L4CX_ClearInterruptAndStartMeasurement();
