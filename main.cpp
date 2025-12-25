@@ -6,7 +6,7 @@ void setup(void)
   nicla::disableCharging();
   nicla::setBatteryNTCEnabled(false);
   nicla::disableLDO();
-  
+
   NRF_CLOCK->TASKS_HFCLKSTART = 1;
   while (!NRF_CLOCK->EVENTS_HFCLKSTARTED)
     ;
@@ -83,6 +83,8 @@ static inline void handle_serial(void)
 
 static inline void xshut_set(const int8_t pin, const bool level)
 {
+  return;
+
   static uint8_t state = 0;
   state = level ? state | (1 << pin) : state & ~(1 << pin);
 
@@ -93,15 +95,14 @@ static inline void xshut_set(const int8_t pin, const bool level)
 
 static inline void vl53l4cx_init(void)
 {
-  for (uint8_t i = 0; i < VL53L4CX_COUNT; i++)
+  for (uint8_t i = 0; i < 1; i++)
   {
     xshut_set(i, HIGH);
-    vl53l4cx.changeI2cAddress(VL53L4CX_DEFAULT_DEVICE_ADDRESS);
-    vl53l4cx.VL53L4CX_WaitDeviceBooted();
-    vl53l4cx.VL53L4CX_SetDeviceAddress(vl53l4cx_address[i]);
-    vl53l4cx.VL53L4CX_WaitDeviceBooted();
-    vl53l4cx.VL53L4CX_DataInit();
-    vl53l4cx.VL53L4CX_SetUserROI(&vl53l4cx_UserRoi);
+    vl53l4cx.changeI2cAddress(VL53L4CX_DEFAULT_DEVICE_ADDRESS); // Every sensor boot to default address (0x52)
+    vl53l4cx.VL53L4CX_WaitDeviceBooted();                       // Wait until the sensor is booted and in SW standby
+    vl53l4cx.VL53L4CX_SetDeviceAddress(vl53l4cx_address[i]);    // Give the sensor a new unique address (ex. 0x54, 0x56, etc.)
+    vl53l4cx.VL53L4CX_DataInit();                               // Initialize sensor to default settings (ex. distance mode, timing budget, etc.)
+    vl53l4cx.VL53L4CX_SetUserROI(&vl53l4cx_UserRoi);            // Set user ROI (ex. 4x4 centered)
   }
 }
 
@@ -144,37 +145,49 @@ static inline void sync_task_camera(void)
 
 static inline void sync_task_distance(void)
 {
-  static bool started = false;
-  static uint8_t i = 0;
+  static bool measurement_started = false;
   static uint8_t ready = 0;
   static VL53L4CX_MultiRangingData_t data;
 
-  if (!started)
+  // ONE-TIME START: Only start measurement once
+  if (!measurement_started)
   {
-    vl53l4cx.changeI2cAddress(vl53l4cx_address[i]);
-    started = !vl53l4cx.VL53L4CX_StartMeasurement();
-    return;
+    vl53l4cx.changeI2cAddress(vl53l4cx_address[0]); // Use your sensor's address
+    if (vl53l4cx.VL53L4CX_StartMeasurement() == VL53L4CX_ERROR_NONE)
+    {
+      measurement_started = true;
+    }
+    return; // Exit on this first call
   }
 
+  // CONTINUOUS CHECK: Poll for data continuously
   if (vl53l4cx.VL53L4CX_GetMeasurementDataReady(&ready) == VL53L4CX_ERROR_NONE && ready)
   {
-    if (vl53l4cx.VL53L4CX_GetMultiRangingData(&data) == VL53L4CX_ERROR_NONE &&
-        data.NumberOfObjectsFound > 0 &&
-        data.RangeData[0].RangeStatus == 0)
+    if (vl53l4cx.VL53L4CX_GetMultiRangingData(&data) == VL53L4CX_ERROR_NONE)
     {
-      response.distance[i] += (data.RangeData[0].RangeMilliMeter - response.distance[i]) * DISTANCE_LPF;
+      if (data.NumberOfObjectsFound > 0 && data.RangeData[0].RangeStatus == 0)
+      {
+        // Use your LPF or direct assignment
+        response.distance[0] = data.RangeData[0].RangeMilliMeter;
+        // OR with your filter:
+        // response.distance[0] += (data.RangeData[0].RangeMilliMeter - response.distance[0]) * DISTANCE_LPF;
+      }
     }
 
+    // CRITICAL: Clear interrupt and let sensor continue
     vl53l4cx.VL53L4CX_ClearInterruptAndStartMeasurement();
-    vl53l4cx.VL53L4CX_StopMeasurement();
 
-    i = (i + 1) % VL53L4CX_COUNT;
-    vl53l4cx.changeI2cAddress(vl53l4cx_address[i]);
-    vl53l4cx.VL53L4CX_StartMeasurement();
+    // DO NOT CALL StopMeasurement() or change address here
   }
 }
 
 static inline void async_task_debug(void)
 {
-  return;
+  // Debug distance measurements over Serial
+  printf("Distances (mm): ");
+  for (uint8_t i = 0; i < VL53L4CX_COUNT; i++)
+  {
+    printf("%u ", response.distance[i]);
+  }
+  printf("\n");
 }
