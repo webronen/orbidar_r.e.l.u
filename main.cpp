@@ -95,7 +95,7 @@ static inline void xshut_set(const int8_t pin, const bool level)
 
 static inline void vl53l4cx_init(void)
 {
-  for (uint8_t i = 0; i < VL53L4CX_COUNT; i++)
+  for (uint8_t i = 0; i < 1; i++)
   {
     xshut_set(i, HIGH);
     vl53l4cx.changeI2cAddress(VL53L4CX_DEFAULT_DEVICE_ADDRESS); // Every sensor boot to default address (0x52)
@@ -143,32 +143,62 @@ static inline void sync_task_camera(void)
   return;
 }
 
+// static inline void sync_task_distance(void)
+// {
+//   static bool started = false;
+//   static uint8_t i = 0;
+//   static uint8_t ready = 0;
+//   static VL53L4CX_MultiRangingData_t data;
+
+//   if (!started)
+//   {
+//     vl53l4cx.changeI2cAddress(vl53l4cx_address[i]);
+//     started = !vl53l4cx.VL53L4CX_ClearInterruptAndStartMeasurement();
+//     return;
+//   }
+
+//   if (!vl53l4cx.VL53L4CX_GetMeasurementDataReady(&ready) && ready)
+//   {
+//     if (!vl53l4cx.VL53L4CX_GetMultiRangingData(&data) &&
+//         data.NumberOfObjectsFound > 0 &&
+//         data.RangeData[0].RangeStatus == 0)
+//     {
+//       response.distance[i] += (data.RangeData[0].RangeMilliMeter - response.distance[i]) * DISTANCE_LPF;
+//     }
+
+//     i = (i + 1) % 1;
+//     vl53l4cx.changeI2cAddress(vl53l4cx_address[i]);
+//     started = !vl53l4cx.VL53L4CX_ClearInterruptAndStartMeasurement();
+//   }
+// }
+
 static inline void sync_task_distance(void)
 {
-  static bool started = false;
-  static uint8_t i = 0;
+  static uint8_t firing[2] = {0, 1};
+  static bool started[2] = {false, false};
+  static uint8_t ready[2] = {0, 0};
+  static VL53L4CX_MultiRangingData_t data;
 
-  if (!started)
+  for (uint8_t i = 0; i < 2; i++)
   {
-    vl53l4cx.changeI2cAddress(vl53l4cx_address[i]);
-    started = !vl53l4cx.VL53L4CX_ClearInterruptAndStartMeasurement();
-    return;
-  }
-
-  uint8_t ready = 0;
-  if (!vl53l4cx.VL53L4CX_GetMeasurementDataReady(&ready) && ready)
-  {
-    static VL53L4CX_MultiRangingData_t data;
-    if (!vl53l4cx.VL53L4CX_GetMultiRangingData(&data) &&
-        data.NumberOfObjectsFound > 0 &&
-        data.RangeData[0].RangeStatus == 0)
+    if (!started[i])
     {
-      response.distance[i] += (data.RangeData[0].RangeMilliMeter - response.distance[i]) * DISTANCE_LPF;
+      vl53l4cx.changeI2cAddress(vl53l4cx_address[firing[i]]);
+      started[i] = !vl53l4cx.VL53L4CX_ClearInterruptAndStartMeasurement();
     }
+    else if (!vl53l4cx.VL53L4CX_GetMeasurementDataReady(&ready[i]) && ready[i])
+    {
+      if (!vl53l4cx.VL53L4CX_GetMultiRangingData(&data) &&
+          data.NumberOfObjectsFound > 0 &&
+          data.RangeData[0].RangeStatus == 0)
+      {
+        response.distance[firing[i]] += (data.RangeData[0].RangeMilliMeter - response.distance[firing[i]]) * DISTANCE_LPF;
+      }
 
-    i = (i + 1) % VL53L4CX_COUNT;
-    vl53l4cx.changeI2cAddress(vl53l4cx_address[i]);
-    started = !vl53l4cx.VL53L4CX_ClearInterruptAndStartMeasurement();
+      firing[i] = (firing[i] + 2) % VL53L4CX_COUNT;
+      vl53l4cx.changeI2cAddress(vl53l4cx_address[firing[i]]);
+      started[i] = !vl53l4cx.VL53L4CX_ClearInterruptAndStartMeasurement();
+    }
   }
 }
 
