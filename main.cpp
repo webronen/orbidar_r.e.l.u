@@ -95,7 +95,7 @@ static inline void xshut_set(const int8_t pin, const bool level)
 
 static inline void vl53l4cx_init(void)
 {
-  for (uint8_t i = 0; i < 1; i++)
+  for (uint8_t i = 0; i < VL53L4CX_COUNT; i++)
   {
     xshut_set(i, HIGH);
     vl53l4cx.changeI2cAddress(VL53L4CX_DEFAULT_DEVICE_ADDRESS); // Every sensor boot to default address (0x52)
@@ -145,39 +145,30 @@ static inline void sync_task_camera(void)
 
 static inline void sync_task_distance(void)
 {
-  static bool measurement_started = false;
-  static uint8_t ready = 0;
-  static VL53L4CX_MultiRangingData_t data;
+  static bool started = false;
+  static uint8_t i = 0;
 
-  // ONE-TIME START: Only start measurement once
-  if (!measurement_started)
+  if (!started)
   {
-    vl53l4cx.changeI2cAddress(vl53l4cx_address[0]); // Use your sensor's address
-    if (vl53l4cx.VL53L4CX_StartMeasurement() == VL53L4CX_ERROR_NONE)
-    {
-      measurement_started = true;
-    }
-    return; // Exit on this first call
+    vl53l4cx.changeI2cAddress(vl53l4cx_address[i]);
+    started = !vl53l4cx.VL53L4CX_ClearInterruptAndStartMeasurement();
+    return;
   }
 
-  // CONTINUOUS CHECK: Poll for data continuously
-  if (vl53l4cx.VL53L4CX_GetMeasurementDataReady(&ready) == VL53L4CX_ERROR_NONE && ready)
+  uint8_t ready = 0;
+  if (!vl53l4cx.VL53L4CX_GetMeasurementDataReady(&ready) && ready)
   {
-    if (vl53l4cx.VL53L4CX_GetMultiRangingData(&data) == VL53L4CX_ERROR_NONE)
+    static VL53L4CX_MultiRangingData_t data;
+    if (!vl53l4cx.VL53L4CX_GetMultiRangingData(&data) &&
+        data.NumberOfObjectsFound > 0 &&
+        data.RangeData[0].RangeStatus == 0)
     {
-      if (data.NumberOfObjectsFound > 0 && data.RangeData[0].RangeStatus == 0)
-      {
-        // Use your LPF or direct assignment
-        response.distance[0] = data.RangeData[0].RangeMilliMeter;
-        // OR with your filter:
-        // response.distance[0] += (data.RangeData[0].RangeMilliMeter - response.distance[0]) * DISTANCE_LPF;
-      }
+      response.distance[i] += (data.RangeData[0].RangeMilliMeter - response.distance[i]) * DISTANCE_LPF;
     }
 
-    // CRITICAL: Clear interrupt and let sensor continue
-    vl53l4cx.VL53L4CX_ClearInterruptAndStartMeasurement();
-
-    // DO NOT CALL StopMeasurement() or change address here
+    i = (i + 1) % VL53L4CX_COUNT;
+    vl53l4cx.changeI2cAddress(vl53l4cx_address[i]);
+    started = !vl53l4cx.VL53L4CX_ClearInterruptAndStartMeasurement();
   }
 }
 
