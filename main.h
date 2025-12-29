@@ -21,9 +21,8 @@ SensorQuaternion quaternion(BHY2_SENSOR_ID_RV);
 #undef Mode
 #endif
 
-#include <vl53l4cx_class.h>
-VL53L4CX vl53l4cx(&Wire, NC);
-VL53L4CX_UserRoi_t vl53l4cx_UserRoi = {6, 6, 9, 9};
+#include <vl53l4cd_class.h>
+VL53L4CD vl53l4cd(&Wire, -1);
 
 #define SEA_LEVEL_PRESSURE_HPA 1013.25f
 #define SEA_LEVEL_PRESSURE_HPA_INV (1.0f / SEA_LEVEL_PRESSURE_HPA)
@@ -33,14 +32,15 @@ VL53L4CX_UserRoi_t vl53l4cx_UserRoi = {6, 6, 9, 9};
 #define SERIAL_BAUDRATE 115200
 
 #define HZ_TO_US(Hz) ((uint32_t)(1000000.0f / (Hz)))
+#define MS_TO_US(ms) ((uint32_t)((ms) * 1000))
 #define KHZ_TO_HZ(kHz) ((uint32_t)((kHz) * 1000))
 
-#define PCF8574_ADDRESS 0x20
+#define TCA9548A_I2C_ADDRESS 0x70
 
 #define VL53L9CX_ZONE_WIDTH 54
 #define VL53L9CX_ZONE_HEIGHT 42
 #define VL53L9CX_ZONES (VL53L9CX_ZONE_WIDTH * VL53L9CX_ZONE_HEIGHT)
-#define VL53L4CX_COUNT 7
+#define VL53L4CD_COUNT 7
 
 #define SYNC_TASK_COUNT 4
 #define ASYNC_TASK_COUNT 1
@@ -75,7 +75,7 @@ typedef struct __attribute__((packed, aligned(4)))
   float pressure;                    // hectopascal (hPa)
   float temperature;                 // degrees (°C)
   uint16_t camera[VL53L9CX_ZONES];   // millimeters (mm): 54 x 42 zones
-  uint16_t distance[VL53L4CX_COUNT]; // millimeters (mm): 7 sensors
+  uint16_t distance[VL53L4CD_COUNT]; // millimeters (mm): 7 sensors
   uint8_t reserved[2];               // Padding for 4-byte alignment
 } SensorValues_t;
 
@@ -99,13 +99,10 @@ typedef struct __attribute__((packed, aligned(4)))
 
 static_assert(sizeof(SensorField_t) == 8, "SensorField_t struct must be 8 bytes (2 words)");
 
-static const uint8_t vl53l4cx_address[7] = {
-    0x54, 0x56, 0x58, 0x5A, 0x5C, 0x5E, 0x60};
-
-static inline void handle_tasks(const uint32_t current_us);
+static inline void handle_tasks(const uint32_t time);
 static inline void handle_serial(void);
-static inline void xshut_set(const int8_t pin, const bool level);
-static inline void vl53l4cx_init(void);
+static inline void i2c_switch(const int8_t channel);
+static inline void vl53l4cd_init(void);
 
 static inline void sync_task_inertial(void);
 static inline void sync_task_response(void);
@@ -116,7 +113,7 @@ static Task_t critical_tasks[SYNC_TASK_COUNT] = {
     {(void (*)())sync_task_inertial, (const uint32_t)HZ_TO_US(401)},
     {(void (*)())sync_task_response, (const uint32_t)HZ_TO_US(211)},
     {(void (*)())sync_task_camera, (const uint32_t)HZ_TO_US(61)},
-    {(void (*)())sync_task_distance, (const uint32_t)HZ_TO_US(31)},
+    {(void (*)())sync_task_distance, (const uint32_t)HZ_TO_US(7)},
 };
 
 static inline void async_task_debug(void);

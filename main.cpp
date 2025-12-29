@@ -5,7 +5,7 @@ void setup(void)
   nicla::begin(false);
   nicla::disableCharging();
   nicla::setBatteryNTCEnabled(false);
-  nicla::disableLDO();
+  nicla::enable3V3LDO();
 
   NRF_CLOCK->TASKS_HFCLKSTART = 1;
   while (!NRF_CLOCK->EVENTS_HFCLKSTARTED)
@@ -23,12 +23,6 @@ void setup(void)
 
   Wire.begin();
   Wire.setClock(KHZ_TO_HZ(400));
-  xshut_set(NC, false);
-
-  nicla::enable3V3LDO();
-  nrf_delay_ms(100);
-
-  vl53l4cx_init();
 
   Serial.begin(SERIAL_BAUDRATE);
   while (!Serial)
@@ -42,6 +36,7 @@ void setup(void)
       printf("Found device at 0x%02X\n", i);
   }
   printf("Scan complete.\n");
+  nrf_delay_ms(400);
 }
 
 void loop(void)
@@ -81,28 +76,19 @@ static inline void handle_serial(void)
     Serial.write(handle_response[type].ptr, handle_response[type].size);
 }
 
-static inline void xshut_set(const int8_t pin, const bool level)
+static inline void i2c_switch(const int8_t channel)
 {
-  return;
-
-  static uint8_t state = 0;
-  state = level ? state | (1 << pin) : state & ~(1 << pin);
-
-  Wire.beginTransmission(PCF8574_ADDRESS);
-  Wire.write(pin < 0 ? 0x00 : state);
+  Wire.beginTransmission(TCA9548A_I2C_ADDRESS);
+  Wire.write((channel < 0) ? 0 : (1 << channel));
   Wire.endTransmission(true);
 }
 
-static inline void vl53l4cx_init(void)
+static inline void vl53l4cd_init(void)
 {
-  for (uint8_t i = 0; i < 1; i++)
+  for (uint8_t i = 0; i < VL53L4CD_COUNT; i++)
   {
-    xshut_set(i, HIGH);
-    vl53l4cx.changeI2cAddress(VL53L4CX_DEFAULT_DEVICE_ADDRESS); // Every sensor boot to default address (0x52)
-    vl53l4cx.VL53L4CX_WaitDeviceBooted();                       // Wait until the sensor is booted and in SW standby
-    vl53l4cx.VL53L4CX_SetDeviceAddress(vl53l4cx_address[i]);    // Give the sensor a new unique address (ex. 0x54, 0x56, etc.)
-    vl53l4cx.VL53L4CX_DataInit();                               // Initialize sensor to default settings (ex. distance mode, timing budget, etc.)
-    vl53l4cx.VL53L4CX_SetUserROI(&vl53l4cx_UserRoi);            // Set user ROI (ex. 4x4 centered)
+    i2c_switch(i);
+    vl53l4cd.VL53L4CD_SensorInit();
   }
 }
 
@@ -113,7 +99,25 @@ static inline void sync_task_inertial(void)
 
 static inline void sync_task_response(void)
 {
+  static uint8_t samples = 0;
+  static DataQuaternion _q;
+
   DataQuaternion q = quaternion._data;
+
+  if (++samples <= 211)
+  {
+    _q.x += (q.x - _q.x) * (1.0f / samples);
+    _q.y += (q.y - _q.y) * (1.0f / samples);
+    _q.z += (q.z - _q.z) * (1.0f / samples);
+    _q.w += (q.w - _q.w) * (1.0f / samples);
+
+    return;
+  }
+
+  q.x -= _q.x;
+  q.y -= _q.y;
+  q.z -= _q.z;
+  q.w -= _q.w;
 
   const float mag = q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
   const float inv = 1.0f / __builtin_sqrtf(mag + __FLT_EPSILON__);
@@ -143,70 +147,30 @@ static inline void sync_task_camera(void)
   return;
 }
 
-// static inline void sync_task_distance(void)
-// {
-//   static bool started = false;
-//   static uint8_t i = 0;
-//   static uint8_t ready = 0;
-//   static VL53L4CX_MultiRangingData_t data;
-
-//   if (!started)
-//   {
-//     vl53l4cx.changeI2cAddress(vl53l4cx_address[i]);
-//     started = !vl53l4cx.VL53L4CX_ClearInterruptAndStartMeasurement();
-//     return;
-//   }
-
-//   if (!vl53l4cx.VL53L4CX_GetMeasurementDataReady(&ready) && ready)
-//   {
-//     if (!vl53l4cx.VL53L4CX_GetMultiRangingData(&data) &&
-//         data.NumberOfObjectsFound > 0 &&
-//         data.RangeData[0].RangeStatus == 0)
-//     {
-//       response.distance[i] += (data.RangeData[0].RangeMilliMeter - response.distance[i]) * DISTANCE_LPF;
-//     }
-
-//     i = (i + 1) % 1;
-//     vl53l4cx.changeI2cAddress(vl53l4cx_address[i]);
-//     started = !vl53l4cx.VL53L4CX_ClearInterruptAndStartMeasurement();
-//   }
-// }
-
 static inline void sync_task_distance(void)
 {
-  static uint8_t firing[2] = {0, 1};
-  static bool started[2] = {false, false};
-  static uint8_t ready[2] = {0, 0};
-  static VL53L4CX_MultiRangingData_t data;
+  static uint8_t i = 0;
+  const uint8_t j = (i - 1 + VL53L4CD_COUNT) % VL53L4CD_COUNT;
 
-  for (uint8_t i = 0; i < 2; i++)
-  {
-    if (!started[i])
-    {
-      vl53l4cx.changeI2cAddress(vl53l4cx_address[firing[i]]);
-      started[i] = !vl53l4cx.VL53L4CX_ClearInterruptAndStartMeasurement();
-    }
-    else if (!vl53l4cx.VL53L4CX_GetMeasurementDataReady(&ready[i]) && ready[i])
-    {
-      if (!vl53l4cx.VL53L4CX_GetMultiRangingData(&data) &&
-          data.NumberOfObjectsFound > 0 &&
-          data.RangeData[0].RangeStatus == 0)
-      {
-        response.distance[firing[i]] += (data.RangeData[0].RangeMilliMeter - response.distance[firing[i]]) * DISTANCE_LPF;
-      }
+  i2c_switch(j);
 
-      firing[i] = (firing[i] + 2) % VL53L4CX_COUNT;
-      vl53l4cx.changeI2cAddress(vl53l4cx_address[firing[i]]);
-      started[i] = !vl53l4cx.VL53L4CX_ClearInterruptAndStartMeasurement();
-    }
-  }
+  uint16_t distance = 0;
+  if (!vl53l4cd.VL53L4CD_GetDistance(&distance))
+    response.distance[j] += (distance - response.distance[j]) * DISTANCE_LPF;
+
+  vl53l4cd.VL53L4CD_StopRanging();
+
+  i2c_switch(i);
+  vl53l4cd.VL53L4CD_StartRanging();
+
+  i = (i + 1) % VL53L4CD_COUNT;
 }
 
 static inline void async_task_debug(void)
 {
   // Debug distance measurements over Serial
   printf("Distances (mm): ");
-  for (uint8_t i = 0; i < VL53L4CX_COUNT; i++)
+  for (uint8_t i = 0; i < VL53L4CD_COUNT; i++)
   {
     printf("%u ", response.distance[i]);
   }
