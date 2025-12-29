@@ -157,7 +157,6 @@ static inline void sync_task_distance(void)
   uint16_t distance = 0;
   if (!vl53l4cd.VL53L4CD_GetDistance(&distance))
     response.distance[j] += (distance - response.distance[j]) * DISTANCE_LPF;
-
   vl53l4cd.VL53L4CD_StopRanging();
 
   i2c_switch(i);
