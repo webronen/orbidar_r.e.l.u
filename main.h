@@ -5,9 +5,8 @@
 
 #include <nrf.h>
 #include <nrf_delay.h>
-
-#include <Nicla_System.h>
 #include <Wire.h>
+#include <Nicla_System.h>
 
 #include <sensors/Sensor.h>
 Sensor humidity(BHY2_SENSOR_ID_HUM);
@@ -33,9 +32,14 @@ VL53L4CD vl53l4cd(&Wire, -1);
 
 #define HZ_TO_US(Hz) ((uint32_t)(1000000.0f / (Hz)))
 #define MS_TO_US(ms) ((uint32_t)((ms) * 1000))
+#define HZ_TO_MS(Hz) ((uint32_t)(1000.0f / (Hz)))
 #define KHZ_TO_HZ(kHz) ((uint32_t)((kHz) * 1000))
 
-#define TCA9548A_I2C_ADDRESS 0x70
+#define PCF8574T_I2C_ADDRESS 0x20 // 7-bit address (A0, A1, A2 = GND)
+#define VL53L4CD_I2C_ADDRESS 0x52 // 7-bit address
+#define VL53L9CX_I2C_ADDRESS 0x52 // 7-bit address
+
+#define DISTANCE_I2C_ADDRESS 0x54 // Starting 7-bit address for VL53L4CD sensors
 
 #define VL53L9CX_ZONE_WIDTH 54
 #define VL53L9CX_ZONE_HEIGHT 42
@@ -101,8 +105,8 @@ static_assert(sizeof(SensorField_t) == 8, "SensorField_t struct must be 8 bytes 
 
 static inline void handle_tasks(const uint32_t time);
 static inline void handle_serial(void);
-static inline void i2c_switch(const int8_t channel);
-static inline void vl53l4cd_init(void);
+static inline void xshut_set(const int8_t pin, const bool level);
+static inline void vl53l4cd_init(const uint8_t address, const uint8_t count);
 
 static inline void sync_task_inertial(void);
 static inline void sync_task_response(void);

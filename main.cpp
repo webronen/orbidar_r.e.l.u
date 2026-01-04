@@ -24,6 +24,11 @@ void setup(void)
   Wire.begin();
   Wire.setClock(KHZ_TO_HZ(400));
 
+  xshut_set(-1, false); // Ensure all XSHUT pins are LOW before initialization
+  nrf_delay_ms(100);    // Wait all sensors to power down
+
+  vl53l4cd_init(0x54, VL53L4CD_COUNT); // Initialize VL53L4CD sensors
+
   Serial.begin(SERIAL_BAUDRATE);
   while (!Serial)
     ;
@@ -36,7 +41,6 @@ void setup(void)
       printf("Found device at 0x%02X\n", i);
   }
   printf("Scan complete.\n");
-  nrf_delay_ms(400);
 }
 
 void loop(void)
@@ -76,19 +80,24 @@ static inline void handle_serial(void)
     Serial.write(handle_response[type].ptr, handle_response[type].size);
 }
 
-static inline void i2c_switch(const int8_t channel)
+static inline void xshut_set(const int8_t pin, const bool level)
 {
-  Wire.beginTransmission(TCA9548A_I2C_ADDRESS);
-  Wire.write((channel < 0) ? 0 : (1 << channel));
-  Wire.endTransmission(true);
+  static uint8_t state = 0x00; // Current state of all XSHUT pins
+  // If pin < 0, set all pins LOW, else set specific pin to LOW or HIGH
+  state = pin < 0 ? 0x00 : (level ? (state | (1 << pin)) : (state & ~(1 << pin)));
+  Wire.master->write(PCF8574T_I2C_ADDRESS << 1, (const char *)&state, 1, true);
 }
 
-static inline void vl53l4cd_init(void)
+static inline void vl53l4cd_init(const uint8_t address, const uint8_t count)
 {
-  for (uint8_t i = 0; i < VL53L4CD_COUNT; i++)
+  for (uint8_t i = 0; i < count; i++)
   {
-    i2c_switch(i);
+    xshut_set(i, true);
+    nrf_delay_ms(100);
+
+    vl53l4cd.dev = VL53L4CD_I2C_ADDRESS;
     vl53l4cd.VL53L4CD_SensorInit();
+    vl53l4cd.VL53L4CD_SetI2CAddress(address + i * 2);
   }
 }
 
@@ -99,33 +108,7 @@ static inline void sync_task_inertial(void)
 
 static inline void sync_task_response(void)
 {
-  static uint8_t samples = 0;
-  static DataQuaternion _q;
-
   DataQuaternion q = quaternion._data;
-
-  if (++samples <= 211)
-  {
-    _q.x += (q.x - _q.x) * (1.0f / samples);
-    _q.y += (q.y - _q.y) * (1.0f / samples);
-    _q.z += (q.z - _q.z) * (1.0f / samples);
-    _q.w += (q.w - _q.w) * (1.0f / samples);
-
-    return;
-  }
-
-  q.x -= _q.x;
-  q.y -= _q.y;
-  q.z -= _q.z;
-  q.w -= _q.w;
-
-  const float mag = q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
-  const float inv = 1.0f / __builtin_sqrtf(mag + __FLT_EPSILON__);
-
-  q.x *= inv;
-  q.y *= inv;
-  q.z *= inv;
-  q.w *= inv;
 
   const float yaw = __builtin_atan2f(2.0f * (q.w * q.z + q.x * q.y), 1.0f - 2.0f * (q.y * q.y + q.z * q.z)) * RAD_TO_DEG;
   const float roll = __builtin_asinf(2.0f * (q.w * q.y - q.x * q.z)) * RAD_TO_DEG;
@@ -152,26 +135,41 @@ static inline void sync_task_distance(void)
   static uint8_t i = 0;
   const uint8_t j = (i - 1 + VL53L4CD_COUNT) % VL53L4CD_COUNT;
 
-  i2c_switch(j);
+  vl53l4cd.dev = DISTANCE_I2C_ADDRESS + j * 2;
 
-  uint16_t distance = 0;
-  if (!vl53l4cd.VL53L4CD_GetDistance(&distance))
-    response.distance[j] += (distance - response.distance[j]) * DISTANCE_LPF;
+  VL53L4CD_ResultData_t result = {0};
+  if (!vl53l4cd.VL53L4CD_GetResultData(&result) &&
+      result.range_status == 9 &&
+      result.distance_mm >= 0 &&
+      result.distance_mm <= 1300)
+  {
+    response.distance[j] += (result.distance_mm - response.distance[j]) * DISTANCE_LPF;
+  }
+
+  vl53l4cd.VL53L4CD_ClearInterrupt();
   vl53l4cd.VL53L4CD_StopRanging();
 
-  i2c_switch(i);
-  vl53l4cd.VL53L4CD_StartRanging();
-
   i = (i + 1) % VL53L4CD_COUNT;
+  vl53l4cd.dev = DISTANCE_I2C_ADDRESS + i * 2;
+  vl53l4cd.VL53L4CD_StartRanging();
 }
 
 static inline void async_task_debug(void)
 {
-  // Debug distance measurements over Serial
+  printf("Altitude: %.2f m, Pressure: %.2f hPa, Humidity: %.2f %%, Temperature: %.2f °C\n",
+         response.altitude,
+         response.pressure,
+         response.humidity,
+         response.temperature);
+
+  printf("Orientation: Yaw: %.2f °, Pitch: %.2f °, Roll: %.2f °\n",
+         response.orientation[0],
+         response.orientation[1],
+         response.orientation[2]);
+
   printf("Distances (mm): ");
   for (uint8_t i = 0; i < VL53L4CD_COUNT; i++)
-  {
     printf("%u ", response.distance[i]);
-  }
+
   printf("\n");
 }
