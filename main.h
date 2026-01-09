@@ -35,11 +35,11 @@ VL53L4CD vl53l4cd(&Wire, -1);
 #define HZ_TO_MS(Hz) ((uint32_t)(1000.0f / (Hz)))
 #define KHZ_TO_HZ(kHz) ((uint32_t)((kHz) * 1000))
 
-#define PCF8574T_I2C_ADDRESS 0x20 // 7-bit address (A0, A1, A2 = GND)
-#define VL53L4CD_I2C_ADDRESS 0x52 // 7-bit address
-#define VL53L9CX_I2C_ADDRESS 0x52 // 7-bit address
+#define PCF8574T_I2C_ADDRESS 0x20 // 7-bit address (8-bit is 0x40)
+#define VL53L4CD_I2C_ADDRESS 0x52 // 8-bit address (7-bit is 0x29)
+#define VL53L9CX_I2C_ADDRESS 0x52 // 8-bit address (7-bit is 0x29)
 
-#define DISTANCE_I2C_ADDRESS 0x54 // Starting 7-bit address for VL53L4CD sensors
+#define DISTANCE_I2C_ADDRESS 0x54 // Starting 8-bit address for VL53L4CD sensors (7-bit is 0x2A)
 
 #define VL53L9CX_ZONE_WIDTH 54
 #define VL53L9CX_ZONE_HEIGHT 42
@@ -111,6 +111,27 @@ static inline void vl53l4cd_init(const uint8_t address, const uint8_t count);
 static inline void sync_task_inertial(void);
 static inline void sync_task_response(void);
 static inline void sync_task_camera(void);
+
+/**
+ * @brief  Asynchronous ranging pipeline handler.
+ *
+ * This function implements a non-blocking measurement pipeline for multiple
+ * VL53L4CD sensors. Each call performs two operations:
+ *   1) Read and stop the sensor whose measurement was started during the
+ *      previous call.
+ *   2) Advance to the next sensor and start a new ranging operation.
+ *
+ * The index 'i' always refers to the sensor whose measurement is ready at the
+ * beginning of the call. After reading and stopping that sensor, 'i' is
+ * incremented (with wrap-around), and the next sensor is started.
+ *
+ * This creates a continuous pipeline where each sensor receives a full timing
+ * budget between start and read, without blocking or polling.
+ * @param  None
+ * @return None
+ * @note   Requires periodic execution (e.g. timer or scheduler) with a period
+ *         greater than or equal to the configured timing budget.
+ */
 static inline void sync_task_distance(void);
 
 static Task_t critical_tasks[SYNC_TASK_COUNT] = {

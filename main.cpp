@@ -5,7 +5,8 @@ void setup(void)
   nicla::begin(false);
   nicla::disableCharging();
   nicla::setBatteryNTCEnabled(false);
-  nicla::enable3V3LDO();
+  nicla::disableLDO();
+  nicla::enable1V8LDO();
 
   NRF_CLOCK->TASKS_HFCLKSTART = 1;
   while (!NRF_CLOCK->EVENTS_HFCLKSTARTED)
@@ -24,23 +25,12 @@ void setup(void)
   Wire.begin();
   Wire.setClock(KHZ_TO_HZ(400));
 
-  xshut_set(-1, false); // Ensure all XSHUT pins are LOW before initialization
-  nrf_delay_ms(100);    // Wait all sensors to power down
-
-  vl53l4cd_init(0x54, VL53L4CD_COUNT); // Initialize VL53L4CD sensors
+  xshut_set(NC, false);
+  vl53l4cd_init(DISTANCE_I2C_ADDRESS, VL53L4CD_COUNT);
 
   Serial.begin(SERIAL_BAUDRATE);
   while (!Serial)
     ;
-
-  printf("I2C Scanner:\n");
-  for (uint8_t i = 1; i < 127; i++)
-  {
-    Wire.beginTransmission(i);
-    if (!Wire.endTransmission(true))
-      printf("Found device at 0x%02X\n", i);
-  }
-  printf("Scan complete.\n");
 }
 
 void loop(void)
@@ -82,8 +72,7 @@ static inline void handle_serial(void)
 
 static inline void xshut_set(const int8_t pin, const bool level)
 {
-  static uint8_t state = 0x00; // Current state of all XSHUT pins
-  // If pin < 0, set all pins LOW, else set specific pin to LOW or HIGH
+  static uint8_t state = 0x00;
   state = pin < 0 ? 0x00 : (level ? (state | (1 << pin)) : (state & ~(1 << pin)));
   Wire.master->write(PCF8574T_I2C_ADDRESS << 1, (const char *)&state, 1, true);
 }
@@ -92,13 +81,13 @@ static inline void vl53l4cd_init(const uint8_t address, const uint8_t count)
 {
   for (uint8_t i = 0; i < count; i++)
   {
-    xshut_set(i, true);
-    nrf_delay_ms(100);
-
+    xshut_set(i, HIGH);
     vl53l4cd.dev = VL53L4CD_I2C_ADDRESS;
     vl53l4cd.VL53L4CD_SensorInit();
     vl53l4cd.VL53L4CD_SetI2CAddress(address + i * 2);
   }
+
+  vl53l4cd.dev = address;
 }
 
 static inline void sync_task_inertial(void)
@@ -133,21 +122,12 @@ static inline void sync_task_camera(void)
 static inline void sync_task_distance(void)
 {
   static uint8_t i = 0;
-  const uint8_t j = (i - 1 + VL53L4CD_COUNT) % VL53L4CD_COUNT;
 
-  vl53l4cd.dev = DISTANCE_I2C_ADDRESS + j * 2;
+  static VL53L4CD_RawResult_t result = {0};
+  if (!vl53l4cd.VL53L4CD_GetRawResult(&result) && result.range_status == 9)
+    response.distance[i] += (__builtin_bswap16(result.distance) - response.distance[i]) * DISTANCE_LPF;
 
-  VL53L4CD_ResultData_t result = {0};
-  if (!vl53l4cd.VL53L4CD_GetResultData(&result) &&
-      result.range_status == 9 &&
-      result.distance_mm >= 0 &&
-      result.distance_mm <= 1300)
-  {
-    response.distance[j] += (result.distance_mm - response.distance[j]) * DISTANCE_LPF;
-  }
-
-  vl53l4cd.VL53L4CD_ClearInterrupt();
-  vl53l4cd.VL53L4CD_StopRanging();
+  vl53l4cd.VL53L4CD_ClearInterruptAndStop();
 
   i = (i + 1) % VL53L4CD_COUNT;
   vl53l4cd.dev = DISTANCE_I2C_ADDRESS + i * 2;
@@ -156,20 +136,5 @@ static inline void sync_task_distance(void)
 
 static inline void async_task_debug(void)
 {
-  printf("Altitude: %.2f m, Pressure: %.2f hPa, Humidity: %.2f %%, Temperature: %.2f °C\n",
-         response.altitude,
-         response.pressure,
-         response.humidity,
-         response.temperature);
-
-  printf("Orientation: Yaw: %.2f °, Pitch: %.2f °, Roll: %.2f °\n",
-         response.orientation[0],
-         response.orientation[1],
-         response.orientation[2]);
-
-  printf("Distances (mm): ");
-  for (uint8_t i = 0; i < VL53L4CD_COUNT; i++)
-    printf("%u ", response.distance[i]);
-
-  printf("\n");
+  return;
 }
