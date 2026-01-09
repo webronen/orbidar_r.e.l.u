@@ -126,10 +126,10 @@ static inline void sync_task_camera(void);
  *
  * This creates a continuous pipeline where each sensor receives a full timing
  * budget between start and read, without blocking or polling.
- * 
+ *
  * @param  None
  * @return None
- * 
+ *
  * @note   Requires periodic execution (e.g. timer or scheduler) with a period
  *         greater than or equal to the configured timing budget.
  */
@@ -166,7 +166,7 @@ static const SensorField_t handle_response[REQUEST_TYPE_COUNT] = {
     {(const uint8_t *)&response.pressure, (const uint16_t)sizeof(response.pressure)},       // 0x04: Pressure only
     {(const uint8_t *)&response.temperature, (const uint16_t)sizeof(response.temperature)}, // 0x05: Temperature only
     {(const uint8_t *)&response.camera, (const uint16_t)sizeof(response.camera)},           // 0x06: Camera only
-    {(const uint8_t *)&response.distance, (const uint16_t)sizeof(response.distance)},       // 0x07: Radial only
+    {(const uint8_t *)&response.distance, (const uint16_t)sizeof(response.distance)},       // 0x07: Distance only
 };
 
 #endif // MAIN_H
