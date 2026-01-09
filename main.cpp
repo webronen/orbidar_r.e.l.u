@@ -6,9 +6,7 @@ void setup(void)
   nicla::disableCharging();
   nicla::setBatteryNTCEnabled(false);
   nicla::disableLDO();
-  nrf_delay_ms(10);
   nicla::enable1V8LDO();
-  nrf_delay_ms(10);
 
   NRF_CLOCK->TASKS_HFCLKSTART = 1;
   while (!NRF_CLOCK->EVENTS_HFCLKSTARTED)
