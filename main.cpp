@@ -5,7 +5,6 @@ void setup(void)
   nicla::begin(false);
   nicla::disableCharging();
   nicla::setBatteryNTCEnabled(false);
-  nicla::disableLDO();
   nicla::enable1V8LDO();
 
   NRF_CLOCK->TASKS_HFCLKSTART = 1;
@@ -136,5 +135,10 @@ static inline void sync_task_distance(void)
 
 static inline void async_task_debug(void)
 {
-  return;
+  printf("Distances (mm): ");
+
+  for (uint8_t i = 0; i < VL53L4CD_COUNT; i++)
+    printf("%3u°:%5u  ", 45 + 45 * i, response.distance[i]);
+
+  printf("\n");
 }
