@@ -5,7 +5,10 @@ void setup(void)
   nicla::begin(false);
   nicla::disableCharging();
   nicla::setBatteryNTCEnabled(false);
+  nicla::disableLDO();
+  nrf_delay_ms(10);
   nicla::enable1V8LDO();
+  nrf_delay_ms(10);
 
   NRF_CLOCK->TASKS_HFCLKSTART = 1;
   while (!NRF_CLOCK->EVENTS_HFCLKSTARTED)
@@ -28,8 +31,6 @@ void setup(void)
   vl53l4cd_init(DISTANCE_I2C_ADDRESS, VL53L4CD_COUNT);
 
   Serial.begin(SERIAL_BAUDRATE);
-  while (!Serial)
-    ;
 }
 
 void loop(void)
