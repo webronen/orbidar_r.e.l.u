@@ -117,8 +117,7 @@ static inline void sync_task_camera(void);
  *
  * This function implements a non-blocking measurement pipeline for multiple
  * VL53L4CD sensors. Each call performs two operations:
- *   1) Read and stop the sensor whose measurement was started during the
- *      previous call.
+ *   1) Read and stop the sensor whose measurement was started during the previous call.
  *   2) Advance to the next sensor and start a new ranging operation.
  *
  * The index 'i' always refers to the sensor whose measurement is ready at the
@@ -127,8 +126,10 @@ static inline void sync_task_camera(void);
  *
  * This creates a continuous pipeline where each sensor receives a full timing
  * budget between start and read, without blocking or polling.
+ * 
  * @param  None
  * @return None
+ * 
  * @note   Requires periodic execution (e.g. timer or scheduler) with a period
  *         greater than or equal to the configured timing budget.
  */
