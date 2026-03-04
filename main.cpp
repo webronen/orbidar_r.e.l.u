@@ -14,7 +14,7 @@ void setup() {
 
   if (NRF_POWER->USBREGSTATUS & POWER_USBREGSTATUS_VBUSDETECT_Msk) {
     NRF_TIMER0->TASKS_CAPTURE[0] = TIMER_TASKS_CAPTURE_TASKS_CAPTURE_Trigger;
-    uint32_t wait_us = NRF_TIMER0->CC[0];
+    const uint32_t wait_us = NRF_TIMER0->CC[0];
 
     while (!Serial) {
       NRF_TIMER0->TASKS_CAPTURE[0] = TIMER_TASKS_CAPTURE_TASKS_CAPTURE_Trigger;
