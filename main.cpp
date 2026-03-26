@@ -29,8 +29,6 @@ void setup(void)
   vl53l4cd_init(DISTANCE_I2C_ADDRESS, VL53L4CD_COUNT);
 
   Serial.begin(SERIAL_BAUDRATE);
-  while (!Serial)
-    ;
 }
 
 void loop(void)
@@ -136,5 +134,10 @@ static inline void sync_task_distance(void)
 
 static inline void async_task_debug(void)
 {
-  return;
+  printf("Distances (mm): ");
+
+  for (uint8_t i = 0; i < VL53L4CD_COUNT; i++)
+    printf("%3u°:%5u  ", 45 + 45 * i, response.distance[i]);
+
+  printf("\n");
 }
